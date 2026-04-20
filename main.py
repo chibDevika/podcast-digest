@@ -6,11 +6,18 @@ import os
 from email.mime.text import MIMEText
 from bs4 import BeautifulSoup
 
-FEED_URL = "https://www.lennysnewsletter.com/feed/podcast"
+FEED_URL = "https://api.substack.com/feed/podcast/10845/s/29339.rss"
 LAST_SEEN_FILE = "last_seen.txt"
 
 def get_latest_episode():
-    feed = feedparser.parse(FEED_URL)
+    feed = feedparser.parse(
+        FEED_URL,
+        agent="Mozilla/5.0 (compatible; LennyDigestBot/1.0)"
+    )
+    if not feed.entries:
+        print(f"Feed returned 0 entries. Status: {feed.get('status', 'unknown')}")
+        print(f"Feed bozo: {feed.get('bozo', False)}")
+        raise SystemExit("Empty feed — check URL or add debug logging")
     return feed.entries[0]
 
 def read_last_seen():
