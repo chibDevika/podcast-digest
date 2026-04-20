@@ -1,0 +1,34 @@
+name: Lenny Digest
+
+on:
+  schedule:
+    - cron: "0 9 * * *"  # runs daily at 9am UTC
+  workflow_dispatch:       # lets you trigger manually too
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # needed to commit last_seen.txt back
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - run: python main.py
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+
+      - name: Save last seen episode
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add last_seen.txt
+          git diff --staged --quiet || git commit -m "update last seen" && git push
