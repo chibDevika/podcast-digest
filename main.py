@@ -1,41 +1,48 @@
-import feedparser
 import requests
 import anthropic
 import smtplib
 import os
 from email.mime.text import MIMEText
-from bs4 import BeautifulSoup
+from youtube_transcript_api import YouTubeTranscriptApi
 
-FEED_URL = "https://api.substack.com/feed/podcast/10845/s/29339.rss"
+CHANNEL_ID = "UCDIbBoh-YN0eDEuSwnjEjSg"  # Lenny's Podcast channel
 LAST_SEEN_FILE = "last_seen.txt"
+YT_API_KEY = os.environ["YOUTUBE_API_KEY"]
 
-def get_latest_episode():
-    feed = feedparser.parse(
-        FEED_URL,
-        agent="Mozilla/5.0 (compatible; LennyDigestBot/1.0)"
+def get_latest_video():
+    res = requests.get(
+        "https://www.googleapis.com/youtube/v3/search",
+        params={
+            "key": YT_API_KEY,
+            "channelId": CHANNEL_ID,
+            "part": "snippet",
+            "order": "date",
+            "maxResults": 1,
+            "type": "video",
+        },
+        timeout=10
     )
-    if not feed.entries:
-        print(f"Feed returned 0 entries. Status: {feed.get('status', 'unknown')}")
-        print(f"Feed bozo: {feed.get('bozo', False)}")
-        raise SystemExit("Empty feed — check URL or add debug logging")
-    return feed.entries[0]
+    items = res.json().get("items", [])
+    if not items:
+        raise SystemExit("No videos found")
+    item = items[0]
+    return {
+        "id": item["id"]["videoId"],
+        "title": item["snippet"]["title"],
+        "url": f"https://youtube.com/watch?v={item['id']['videoId']}"
+    }
+
+def fetch_transcript(video_id):
+    transcript = YouTubeTranscriptApi.get_transcript(video_id)
+    return " ".join([t["text"] for t in transcript])
 
 def read_last_seen():
     with open(LAST_SEEN_FILE) as f:
         return f.read().strip()
 
-def write_last_seen(guid):
+def write_last_seen(video_id):
     with open(LAST_SEEN_FILE, "w") as f:
-        f.write(guid)
-
-def fetch_transcript(url):
-    res = requests.get(url, timeout=15)
-    soup = BeautifulSoup(res.text, "html.parser")
-    # Lenny's Substack puts transcript in the main article body
-    body = soup.find("div", class_="body")
-    if not body:
-        body = soup.find("article")
-    return body.get_text(separator="\n") if body else ""
+        f.write(video_id)
 
 def summarize(transcript, title):
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -66,30 +73,23 @@ def send_email(subject, body):
     msg["Subject"] = subject
     msg["From"] = os.environ["GMAIL_ADDRESS"]
     msg["To"] = os.environ["GMAIL_ADDRESS"]
-
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(os.environ["GMAIL_ADDRESS"], os.environ["GMAIL_APP_PASSWORD"])
         server.send_message(msg)
 
 def main():
-    episode = get_latest_episode()
-    guid = episode.get("id", episode.link)
+    video = get_latest_video()
     last_seen = read_last_seen()
 
-    if guid == last_seen:
+    if video["id"] == last_seen:
         print("No new episode.")
         return
 
-    print(f"New episode: {episode.title}")
-    transcript = fetch_transcript(episode.link)
-
-    if not transcript:
-        print("Could not fetch transcript.")
-        return
-
-    summary = summarize(transcript, episode.title)
-    send_email(f"Lenny: {episode.title}", summary)
-    write_last_seen(guid)
+    print(f"New episode: {video['title']}")
+    transcript = fetch_transcript(video["id"])
+    summary = summarize(transcript, video["title"])
+    send_email(f"Lenny: {video['title']}", summary)
+    write_last_seen(video["id"])
     print("Email sent.")
 
 if __name__ == "__main__":
