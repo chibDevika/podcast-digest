@@ -5,7 +5,7 @@ import os
 from email.mime.text import MIMEText
 from youtube_transcript_api import YouTubeTranscriptApi
 
-CHANNEL_ID = "UCDIbBoh-YN0eDEuSwnjEjSg"  # Lenny's Podcast channel
+CHANNEL_ID = "UC6t1O76G0jYXOAoYCm153dA"
 LAST_SEEN_FILE = "last_seen.txt"
 YT_API_KEY = os.environ["YOUTUBE_API_KEY"]
 
